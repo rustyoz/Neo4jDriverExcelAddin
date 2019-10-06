@@ -2,8 +2,10 @@ namespace Neo4jDriverExcelAddin
 {
     using System;
 
-    internal class ExecuteCypherQueryArgs : EventArgs
+    internal class ExecuteQueryArgs : EventArgs
     {
         public string Cypher { get; set; }
     }
+
+    
 }

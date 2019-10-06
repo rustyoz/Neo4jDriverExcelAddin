@@ -1,4 +1,5 @@
 ﻿using Office = Microsoft.Office.Core;
+using Microsoft.Office.Interop.Excel;
 
 namespace Neo4jDriverExcelAddin
 {
@@ -13,6 +14,7 @@ namespace Neo4jDriverExcelAddin
     {
         private CustomTaskPane _customTaskPane;
         private IDriver _driver;
+        private Boolean _connected;
         private Neo4jDriverExcelAddinRibbon _ribbon;
 
         protected override Office.IRibbonExtensibility CreateRibbonExtensibilityObject()
@@ -37,8 +39,129 @@ namespace Neo4jDriverExcelAddin
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-            _driver = GraphDatabase.Driver(new Uri("bolt://localhost")); //TODO: Hard coded Neo4j Instance URL
+            
         }
+
+        private void ConnectDatabase(object sender, ConnectDatabaseArgs e)
+        {
+           
+            _driver = GraphDatabase.Driver(new Uri(e.ConnectionString)); //TODO: Hard coded Neo4j Instance URL
+            _connected = true;
+        }
+
+        private void CreateNodes(object sender, SelectionArgs e)
+        {
+            try
+            {
+                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var inputrange = e.SelectionRange;
+
+                if (_connected == false)
+                {
+                    var control = _customTaskPane.Control as ExecuteQuery;
+                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                }
+
+                using (var session = _driver.Session())
+                {
+                    if( inputrange.Columns.Count <= 1)
+                    {
+                        CurrentControl.SetMessage("Select more than 1 column");
+                    }
+                    
+                    string[] properties = new string[inputrange.Columns.Count];
+                    for(int i =2; i <= inputrange.Columns.Count; i++)
+                    {
+                        try
+                        {
+                            properties[i - 2] = inputrange.Cells[1, i].Value2.ToString();
+                        }
+                        catch
+                        {
+                            properties[i - 2] = "property" + (i - 1).ToString();
+                        }
+                    } 
+
+                    for(int r = 2; r<= inputrange.Rows.Count; r++){
+                        
+                        var row = inputrange.Rows[r];
+                        var label = "";
+                        try
+                        {
+                            label = row.Cells[1, 1].Value2.ToString();
+                        }
+                        catch
+                        {
+                            label = "NewExcelNode";
+                        }
+
+                        string cypher = "CREATE (a: " + label + " { ";
+                        for(int i=2; i<=row.Columns.Count; i++)
+                        {
+                            cypher += properties[i - 2].ToString() + ": \"" + row.Cells[1, i].Value2.ToString() +"\",";
+                        }
+                        cypher = cypher.TrimEnd(',');
+                        cypher += "})";
+
+                        var result = session.Run(cypher);
+                        if (r == inputrange.Rows.Count)
+                        {
+                            CurrentControl.SetMessage(result.Summary.Statement.Text);
+                        }
+
+                    }
+
+                    
+                    
+                }
+            }
+            catch (Neo4jException ex)
+            {
+                CurrentControl.SetMessage(ex.Message);
+            }
+
+        }
+
+        private void ExecuteSelection(object sender, SelectionArgs e)
+        {
+            try
+            {
+                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var inputrange = e.SelectionRange;
+
+                if (_connected == false)
+                {
+                    var control = _customTaskPane.Control as ExecuteQuery;
+                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                }
+
+                using (var session = _driver.Session())
+                {
+                    for( int r = 1; r<= inputrange.Rows.Count;r++)
+                    { 
+
+                        string cypher = "";
+
+                        foreach (Range col in inputrange.Rows[r].Columns)
+                        {
+                            cypher += col.Cells[1,1].Value2.ToString();
+                        }
+                        var result = session.Run(cypher);
+                        
+                        if(r== inputrange.Rows.Count)
+                        {
+                            CurrentControl.SetMessage(result.Summary.Statement.Text);
+                        }
+
+                    }
+                }
+            }
+            catch (Neo4jException ex)
+            {
+                CurrentControl.SetMessage(ex.Message);
+            }
+        }
+
 
         private void ThisAddIn_Shutdown(object sender, EventArgs e)
         {
@@ -80,6 +203,9 @@ namespace Neo4jDriverExcelAddin
 
                 var executeQueryControl = new ExecuteQuery();
                 executeQueryControl.ExecuteCypher += ExecuteCypher;
+                executeQueryControl.ConnectDatabase += ConnectDatabase;
+                executeQueryControl.CreateNodes += CreateNodes;
+                executeQueryControl.ExecuteSelection += ExecuteSelection;
 
                 _customTaskPane = CustomTaskPanes.Add(executeQueryControl, "Execute Query");
                 
@@ -114,10 +240,17 @@ namespace Neo4jDriverExcelAddin
         }
 
 
-        private void ExecuteCypher(object sender, ExecuteCypherQueryArgs e)
+        private void ExecuteCypher(object sender, ExecuteQueryArgs e)
         {
+            
             try
             {
+                if (_connected == false)
+                {
+                    var control = _customTaskPane.Control as ExecuteQuery;
+                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                }
+
                 var worksheet = ((Worksheet) Application.ActiveSheet);
 
                 using (var session = _driver.Session())

@@ -164,7 +164,9 @@
     can be found.
   -->
   <ItemGroup>
-    <Compile Include="ExecuteCypherQueryArgs.cs" />
+    <Compile Include="SelectionArgs.cs" />
+    <Compile Include="ConnectDatabaseArgs.cs" />
+    <Compile Include="ExecuteQueryArgs.cs" />
     <Compile Include="ExecuteQuery.cs">
       <SubType>UserControl</SubType>
     </Compile>
