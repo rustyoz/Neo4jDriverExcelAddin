@@ -144,7 +144,13 @@ namespace Neo4jDriverExcelAddin
 
                         foreach (Range col in inputrange.Rows[r].Columns)
                         {
-                            cypher += col.Cells[1,1].Value2.ToString();
+                            try { 
+                            cypher += col.Cells[1, 1].Value2.ToString();
+                            }
+                            catch
+                            {
+
+                            }
                         }
                         var result = session.Run(cypher);
                         
