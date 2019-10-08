@@ -26,7 +26,7 @@
             if (string.IsNullOrWhiteSpace(cypher))
                 return;
 
-            ExecuteCypher?.Invoke(this, new ExecuteQueryArgs {Cypher = cypher});
+            ExecuteCypher?.Invoke(this, new ExecuteQueryArgs { Cypher = cypher });
         }
 
         public void SetMessage(string message)
@@ -58,5 +58,11 @@
         {
             ExecuteSelection?.Invoke(this, new SelectionArgs { SelectionRange = Globals.ThisAddIn.Application.ActiveWindow.RangeSelection });
         }
+
+        private void CreateRelationshipsButton_Click(object sender, EventArgs e)
+        {
+            CreateRelationships?.Invoke(this, new SelectionArgs { SelectionRange = Globals.ThisAddIn.Application.ActiveWindow.RangeSelection });
+        }
+
     }
 }
