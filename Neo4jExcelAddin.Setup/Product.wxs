@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+
+  <!-- Using https://www.add-in-express.com/creating-addins-blog/2012/11/13/wix-installation-vsto-office-addin/ as the basis -->
+
+  <Product Id="*" Name="Neo4j Excel Addin" Language="1033" Version="1.0.0.0" Manufacturer="Open Source" UpgradeCode="8b5808af-ca11-4dad-b790-61bd7bf5ae1e">
+		<Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" Description="Neo4j Excel Addin"/>
+
+    <Condition Message="You need to be an administrator to install this product.">
+      Privileged
+    </Condition>
+    
+    <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed." />
+		<MediaTemplate EmbedCab="yes"/>
+
+		<Feature Id="Complete" Title="All the components" Level="1">
+			<ComponentGroupRef Id="ProductComponents" />
+      <ComponentRef Id="Registry_FriendlyName" />
+      <ComponentRef Id="Registry_Description" />
+      <ComponentRef Id="Registry_Manifest" />
+      <ComponentRef Id="Registry_LoadBehavior" />
+		</Feature>
+
+    <UIRef Id="WixUI_Minimal" />
+
+    <WixVariable Id="WixUIDialogBmp" Value="images\background.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="images\topbanner.bmp" />
+    <WixVariable Id="WixUIExclamationIco" Value="images\logoonly.32x32.bmp" />
+    <WixVariable Id="WixUIInfoIco" Value="images\logoonly.32x32.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="license\License.rtf" />
+	</Product>
+
+	<Fragment>
+		<Directory Id="TARGETDIR" Name="SourceDir">
+			<Directory Id="ProgramFilesFolder">
+				<Directory Id="INSTALLFOLDER" Name="Neo4jExcelAddIn" />
+        <Component Id="Registry_FriendlyName">
+          <RegistryValue Id="RegKey_FriendlyName" Root="HKCU"
+                         Key="Software\Microsoft\Office\Excel\AddIns\Neo4jExcelAddIn"
+                         Name="FriendlyName"
+                         Value="Excel Addin for Neo4j"
+                         Type="string" KeyPath="yes" />
+        </Component>        
+        <Component Id="Registry_Description">
+          <RegistryValue Id="RegKey_Description" Root="HKCU"
+                         Key="Software\Microsoft\Office\Excel\AddIns\Neo4jExcelAddIn"
+                         Name="Description"
+                         Value="Allows you to perform interaction with Neo4j from within Excel."
+                         Type="string" KeyPath="yes" />
+        </Component>
+        <Component Id="Registry_Manifest">
+          <RegistryValue Id="RegKey_Manifest" Root="HKCU"
+                         Key="Software\Microsoft\Office\Excel\AddIns\Neo4jExcelAddIn"
+                         Name="Manifest" Value="[INSTALLFOLDER]Neo4jDriverExcelAddin.vsto|vstolocal"
+                         Type="string" KeyPath="yes" />
+        </Component>
+        <Component Id="Registry_LoadBehavior">
+          <RegistryValue Id="RegKey_LoadBehavior" Root="HKCU"
+                         Key="Software\Microsoft\Office\Excel\AddIns\Neo4jExcelAddIn"
+                         Name="LoadBehavior" Value="3"
+                         Type="integer" KeyPath="yes" />
+        </Component>
+			</Directory>
+		</Directory>
+	</Fragment>
+  
+	<Fragment>
+    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <Component Id="Neo4jDriverExcelAddin_vsto_Component">
+        <File Id="Neo4jDriverExcelAddin_vsto" KeyPath="yes"
+              Name="Neo4jDriverExcelAddin.vsto" 
+              Source="..\Neo4jDriverExcelAddin\bin\$(var.Configuration)\Neo4jDriverExcelAddin.vsto"></File>
+      </Component>
+      <Component Id="Neo4jDriverExcelAddin_dll_manifest_Component">
+        <File Id="Neo4jDriverExcelAddin_dll_manifest" KeyPath="yes"
+              Name="Neo4jDriverExcelAddin.dll.manifest" 
+              Source="..\Neo4jDriverExcelAddin\bin\$(var.Configuration)\Neo4jDriverExcelAddin.dll.manifest"></File>
+      </Component>
+      <Component Id="Neo4jDriverExcelAddin_dll_Component" >
+        <File Id="Neo4jDriverExcelAddin_dll" KeyPath="yes"
+              Name="Neo4jDriverExcelAddin.dll" 
+              Source="..\Neo4jDriverExcelAddin\bin\$(var.Configuration)\Neo4jDriverExcelAddin.dll" />
+      </Component>
+      <Component Id="Neo4jDriver_dll_Component" >
+        <File Id="Neo4jDriver_dll" KeyPath="yes"
+              Name="Neo4j.Driver.dll" 
+              Source="..\Neo4jDriverExcelAddin\bin\$(var.Configuration)\Neo4j.Driver.dll" />
+      </Component>
+      <Component Id="MSOfficeToolsCommon_dll_Component">
+        <File Id="MSOfficeToolsCommon_dll" KeyPath="yes"
+              Name="Microsoft.Office.Tools.Common.v4.0.Utilities.dll" 
+              Source="..\Neo4jDriverExcelAddin\bin\$(var.Configuration)\Microsoft.Office.Tools.Common.v4.0.Utilities.dll"></File>
+      </Component>
+      <Component Id="MSOfficeToolsExcel_dll_Component">
+        <File Id="MSOfficeToolsExcel_dll" KeyPath="yes"
+              Name="Microsoft.Office.Tools.Excel.dll"
+              Source="..\Neo4jDriverExcelAddin\bin\$(var.Configuration)\Microsoft.Office.Tools.Excel.dll"></File>
+      </Component>
+     
+    </ComponentGroup>
+	</Fragment>
+</Wix>
