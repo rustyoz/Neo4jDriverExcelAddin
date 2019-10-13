@@ -1,7 +1,6 @@
-﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.27703.2026
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.29306.81
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Neo4jDriverExcelAddin", "Neo4jDriverExcelAddin\Neo4jDriverExcelAddin.csproj", "{D863562F-C7F1-41E7-94E9-0ED9846A0EAB}"
 EndProject
@@ -10,6 +9,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		LICENSE = LICENSE
 		README.md = README.md
 	EndProjectSection
+EndProject
+Project("{930C7802-8A8C-48F9-8165-68863BCCD9DD}") = "Neo4jExcelAddin.Setup", "Neo4jExcelAddin.Setup\Neo4jExcelAddin.Setup.wixproj", "{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -27,6 +28,10 @@ Global
 		{D863562F-C7F1-41E7-94E9-0ED9846A0EAB}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D863562F-C7F1-41E7-94E9-0ED9846A0EAB}.Release|Default.ActiveCfg = Release|Any CPU
 		{D863562F-C7F1-41E7-94E9-0ED9846A0EAB}.Release|Default.Build.0 = Release|Any CPU
+		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Debug|Any CPU.ActiveCfg = Debug|x86
+		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Debug|Default.ActiveCfg = Debug|x86
+		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Release|Any CPU.ActiveCfg = Release|x86
+		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Release|Default.ActiveCfg = Release|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -42,6 +47,8 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
+		Debug|Default = Debug|Default
 		Release|Any CPU = Release|Any CPU
+		Release|Default = Release|Default
 	EndGlobalSection
 EndGlobal
