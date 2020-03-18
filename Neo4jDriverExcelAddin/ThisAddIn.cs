@@ -8,7 +8,7 @@ namespace Neo4jDriverExcelAddin
     using System.Linq;
     using Microsoft.Office.Interop.Excel;
     using Microsoft.Office.Tools;
-    using Neo4j.Driver.V1;
+    using Neo4j.Driver;
 
     public partial class ThisAddIn
     {
@@ -45,86 +45,138 @@ namespace Neo4jDriverExcelAddin
         private void ConnectDatabase(object sender, ConnectDatabaseArgs e)
         {
 
-            _driver = GraphDatabase.Driver(new Uri(e.ConnectionString)); //TODO: Hard coded Neo4j Instance URL
+            _driver = GraphDatabase.Driver(new Uri(e.ConnectionString));
             _connected = true;
+            //session = _driver.AsyncSession(o => o.WithDatabase("neo4j"));
+
+
         }
 
-        private void CreateNodes(object sender, SelectionArgs e)
+        private async void CreateNodes(object sender, SelectionArgs e)
         {
+            var control = _customTaskPane.Control as ExecuteQuery;
+            if (_connected == false)
+            {
+                
+                ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+            }
+            var session = _driver.AsyncSession();
             try
             {
                 var worksheet = ((Worksheet)Application.ActiveSheet);
                 var inputrange = e.SelectionRange;
 
-                if (_connected == false)
+
+
+
+                control.progress.Report(0);
+
+                if (inputrange.Columns.Count <= 1)
                 {
-                    var control = _customTaskPane.Control as ExecuteQuery;
-                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                    CurrentControl.SetMessage("Select more than 1 column");
                 }
 
-                using (var session = _driver.Session())
+                string[] properties = new string[inputrange.Columns.Count];
+                for (int i = 2; i <= inputrange.Columns.Count; i++)
                 {
-                    if (inputrange.Columns.Count <= 1)
+                    try
                     {
-                        CurrentControl.SetMessage("Select more than 1 column");
+                        properties[i - 2] = Convert.ToString(inputrange.Cells[1, i].Value2);
+                    }
+                    catch
+                    {
+                        properties[i - 2] = "property" + (i - 1).ToString();
+                    }
+                }
+
+                
+                
+                for (int r = 2; r <= inputrange.Rows.Count; r++)
+                {
+                    control.progress.Report(r/ inputrange.Rows.Count*100);
+                    var row = inputrange.Rows[r];
+                    var label = "";
+                    try
+                    {
+                        label = row.Cells[1, 1].Value2.ToString();
+                    }
+                    catch
+                    {
+                        label = "NewExcelNode";
                     }
 
-                    string[] properties = new string[inputrange.Columns.Count];
-                    for (int i = 2; i <= inputrange.Columns.Count; i++)
+                    string cypher = "MERGE (a: " + label + " { ";
+                    int i = 2;
                     {
-                        try
+                        string propval = Convert.ToString(row.Cells[1, i].Value2);
+
+                        if (properties[i - 2].Length > 0 && propval.Length > 0)
                         {
-                            properties[i - 2] = inputrange.Cells[1, i].Value2.ToString();
-                        }
-                        catch
-                        {
-                            properties[i - 2] = "property" + (i - 1).ToString();
+                            cypher += "`"+properties[i - 2] + "`" + ": \"" + propval + "\",";
                         }
                     }
+                    cypher = cypher.TrimEnd(',');
+                    cypher += "})";
 
-                    for (int r = 2; r <= inputrange.Rows.Count; r++)
+                    
+                    
+                    if (row.columns.count > 2)
                     {
+                        cypher += " SET a += { ";
+                        for (i = 3; i <= row.Columns.Count; i++)
+                        {
+                            string propval = Convert.ToString(row.Cells[1, i].Value2);
 
-                        var row = inputrange.Rows[r];
-                        var label = "";
-                        try
-                        {
-                            label = row.Cells[1, 1].Value2.ToString();
-                        }
-                        catch
-                        {
-                            label = "NewExcelNode";
-                        }
-
-                        string cypher = "MERGE (a: " + label + " { ";
-                        for (int i = 2; i <= row.Columns.Count; i++)
-                        {
-                            cypher += properties[i - 2].ToString() + ": \"" + row.Cells[1, i].Value2.ToString() + "\",";
+                            if (properties[i - 2] != null && propval != null)
+                            {
+                                if (properties[i - 2].Length > 0 && propval.Length > 0)
+                                {
+                                    cypher += "`"+properties[i - 2] + "`" + ": \"" + propval + "\",";
+                                }
+                            }
                         }
                         cypher = cypher.TrimEnd(',');
-                        cypher += "})";
-
-                        var result = session.Run(cypher);
-                        if (r == inputrange.Rows.Count)
-                        {
-                            CurrentControl.SetMessage(result.Summary.Statement.Text);
-                        }
-
+                        cypher += "}";
                     }
+                    
 
 
+                    try
+                    {
+                        IResultCursor cursor = await session.RunAsync(cypher);
 
+                        var records = await cursor.ToListAsync();
+                        
+                        var summary = await cursor.ConsumeAsync();
+                        string message = summary.ToString();
+                        if(r == inputrange.Rows.Count)
+                        {
+                            CurrentControl.SetMessage(message);
+                        }
+                    }
+                    catch (Neo4jException ee)
+                    {
+                        CurrentControl.SetMessage(ee.Message);
+                    }
+                    
                 }
+                await session.CloseAsync();
+
+
+
+
             }
             catch (Neo4jException ex)
             {
                 CurrentControl.SetMessage(ex.Message);
             }
 
+
         }
 
-        private void ExecuteSelection(object sender, SelectionArgs e)
+        private async void ExecuteSelection(object sender, SelectionArgs e)
         {
+            var session = _driver.AsyncSession();
             try
             {
                 var worksheet = ((Worksheet)Application.ActiveSheet);
@@ -135,8 +187,8 @@ namespace Neo4jDriverExcelAddin
                     var control = _customTaskPane.Control as ExecuteQuery;
                     ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
                 }
-
-                using (var session = _driver.Session())
+                /*
+                using (session)
                 {
                     for (int r = 1; r <= inputrange.Rows.Count; r++)
                     {
@@ -162,11 +214,15 @@ namespace Neo4jDriverExcelAddin
                         }
 
                     }
-                }
+                }*/
             }
             catch (Neo4jException ex)
             {
                 CurrentControl.SetMessage(ex.Message);
+            }
+            finally
+            {
+                await session.CloseAsync();
             }
         }
 
@@ -248,9 +304,9 @@ namespace Neo4jDriverExcelAddin
         }
 
 
-        private void ExecuteCypher(object sender, ExecuteQueryArgs e)
+        private async void ExecuteCypher(object sender, ExecuteQueryArgs e)
         {
-
+            var session = _driver.AsyncSession();
             try
             {
                 if (_connected == false)
@@ -261,109 +317,133 @@ namespace Neo4jDriverExcelAddin
 
                 var worksheet = ((Worksheet)Application.ActiveSheet);
 
-                using (var session = _driver.Session())
+                try
                 {
-                    var result = session.Run(e.Cypher);
-                    bool isFirstRow = true;
-                    int row = 2;
-                    foreach (var record in result)
-                    {
-                        for (int i = 0; i < record.Keys.Count; i++)
-                        {
-                            var colName = GetColNameFromIndex(i + 1);
-                            var key = record.Keys[i];
-                            if (isFirstRow)
-                                worksheet.Range[$"{colName}1"].Value2 = key;
-                            worksheet.Range[$"{colName}{row}"].Value2 = record.Values[key].As<string>();
-                        }
-                        row++;
-                        isFirstRow = false;
-                    }
+                    IResultCursor cursor = await session.RunAsync(e.Cypher);
+                    var records = await cursor.ToListAsync();
+
+                    var summary = await cursor.ConsumeAsync();
+                    string message = summary.ToString();
+                    CurrentControl.SetMessage(message);
+
+                }
+                finally
+                {
+                    await session.CloseAsync();
                 }
             }
             catch (Neo4jException ex)
             {
                 CurrentControl.SetMessage(ex.Message);
             }
+            finally
+            {
+                await session.CloseAsync();
+            }
+
         }
 
-        private void CreateRelationships(object sender, SelectionArgs e)
+        private async void CreateRelationships(object sender, SelectionArgs e)
         {
+            if (_connected == false)
+            {
+                var control = _customTaskPane.Control as ExecuteQuery;
+                ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+            }
+            var session = _driver.AsyncSession();
             try
             {
                 var worksheet = ((Worksheet)Application.ActiveSheet);
                 var inputrange = e.SelectionRange;
 
-                if (_connected == false)
+                
+
+
+                if (inputrange.Columns.Count <= 1)
                 {
-                    var control = _customTaskPane.Control as ExecuteQuery;
-                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                    CurrentControl.SetMessage("Select 3 columns with nodes and relationship to create");
+                }
+                if (inputrange.Rows.Count <= 2)
+                {
+                    CurrentControl.SetMessage("Select 2 header rows and 1 data row");
                 }
 
-                using (var session = _driver.Session())
+                string label1 = inputrange.Cells[1, 1].Value2.ToString();
+                string label2 = inputrange.Cells[1, 2].Value2.ToString();
+                string relationshiptype = inputrange.Cells[1, 3].Value2.ToString();
+
+                string[] properties = new string[inputrange.Columns.Count];
+                for (int i = 1; i <= inputrange.Columns.Count; i++)
                 {
-                    if (inputrange.Columns.Count <= 1)
+                    try
                     {
-                        CurrentControl.SetMessage("Select 3 columns with nodes and relationship to create");
+                        properties[i - 1] = Convert.ToString(inputrange.Cells[2, i].Value2);
                     }
-                    if (inputrange.Rows.Count <= 2)
+                    catch
                     {
-                        CurrentControl.SetMessage("Select 2 header rows and 1 data row");
+                    }
+                }
+
+                for (int r = 3; r <= inputrange.Rows.Count; r++)
+                {
+
+                    var row = inputrange.Rows[r];
+                    var input = inputrange;
+
+                    string cypher = "MATCH (a: {0}),(b: {1} ) WHERE a.`{2}` = '{3}' and b.`{4}` = '{5}' MERGE (a)-[r:{6}]->(b) {7}";
+                    string relprop = "";
+                    
+                    if (input.Cells[r, 3].Value2 != null && input.Cells[r,4].value2 != null)
+                    {
+                        
+                        string relpropname = input.Cells[r, 3].Value2;
+                        string relpropvalue = input.Cells[r, 4].Value2;
+                        if (relpropname.Length > 0 && relpropvalue.Length > 0)
+                        {
+                            
+                            relprop = String.Format("SET r += {{ `{0}`: \"{1}\" }}", Convert.ToString(inputrange.Cells[r, 3].Value2), Convert.ToString(inputrange.Cells[r, 4].Value2));
+                        }
                     }
 
-                    string label1 = inputrange.Cells[1, 1].Value2.ToString();
-                    string label2 = inputrange.Cells[1, 2].Value2.ToString();
-                    string relationshiptype = inputrange.Cells[1, 3].Value2.ToString();
+                    string formatedcypher = String.Format(
+                    cypher,
+                    label1,
+                    label2,
+                    properties[0],
+                    inputrange.Cells[r, 1].Value2.ToString(),
+                    properties[1],
+                    inputrange.Cells[r, 2].Value2.ToString(),
+                    relationshiptype, relprop);
 
-                    string[] properties = new string[inputrange.Columns.Count];
-                    for (int i = 1; i <= inputrange.Columns.Count; i++)
+                    try
                     {
-                        try
-                        {
-                            properties[i - 1] = inputrange.Cells[2, i].Value2.ToString();
-                        }
-                        catch
-                        {
-                        }
-                    }
+                        IResultCursor cursor = await session.RunAsync(formatedcypher);
+                        var records = await cursor.ToListAsync();
 
-                    for (int r = 3; r <= inputrange.Rows.Count; r++)
-                    {
-
-                        var row = inputrange.Rows[r];
-
-                        string cypher = "MATCH (a: {0}),(b: {1} ) WHERE a.{2} = '{3}' and b.{4} = '{5}' MERGE (a)-[r:{6} {7}]->(b)";
-                        string relprop = "";
-
-                        if (inputrange.Cells[r, 3].Value2.ToString().Length > 0 && inputrange.Cells[r, 4].Value2.ToString().Length > 0)
-                        {
-                            relprop = String.Format("{{ {0}: \"{1}\" }}", inputrange.Cells[r, 3].Value2.ToString(), inputrange.Cells[r, 4].Value2.ToString());
-                        }
-
-                        string formatedcypher = String.Format(
-                        cypher,
-                        label1,
-                        label2,
-                        properties[0],
-                        inputrange.Cells[r, 1].Value2.ToString(),
-                        properties[1],
-                        inputrange.Cells[r, 2].Value2.ToString(),
-                        relationshiptype, relprop);
-
-                        var result = session.Run(formatedcypher);
+                        var summary = await cursor.ConsumeAsync();
                         if (r == inputrange.Rows.Count)
                         {
-                            CurrentControl.SetMessage(result.Summary.Statement.Text);
+                            string message = summary.ToString();
+                            CurrentControl.SetMessage(message);
                         }
-
                     }
-
+                    catch ( Exception ex)
+                    {
+                        CurrentControl.SetMessage(ex.Message);
+                    }
                 }
-            }
+                
+                await session.CloseAsync();
+                
+
+
+        }
             catch (Neo4jException ex)
             {
                 CurrentControl.SetMessage(ex.Message);
             }
+            
+
 
         }
 

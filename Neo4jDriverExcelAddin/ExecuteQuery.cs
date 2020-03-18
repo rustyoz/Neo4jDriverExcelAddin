@@ -5,16 +5,27 @@
 
     public partial class ExecuteQuery : UserControl
     {
+        private delegate void SafeCallDelegate(string text);
+        public IProgress<int> progress;
         public ExecuteQuery()
         {
             InitializeComponent();
             createNodeTooltip.SetToolTip(CreateNodeButton, "Create Nodes with header row as label and properties.");
+
+            progress = new Progress<int>(v =>
+            {
+                progressBar1.Value = v;
+            });
         }
 
         public string ConnectionString()
         {
             return connectionaddress.Text;
         }
+
+        
+
+        
 
         private void btnExecute_Click(object sender, EventArgs e)
         {
@@ -31,7 +42,18 @@
 
         public void SetMessage(string message)
         {
-            txtNeoResponse.Text = message;
+            if(txtNeoResponse.InvokeRequired)
+            {
+                var d = new SafeCallDelegate(SetMessage);
+                txtNeoResponse.Invoke(d,  new object[] { message });
+
+            }
+            else
+            {
+                txtNeoResponse.Text = message;
+
+            }
+                
         }
 
         private void connectButton_Click(object sender, EventArgs e)

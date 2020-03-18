@@ -30,8 +30,8 @@ Global
 		{D863562F-C7F1-41E7-94E9-0ED9846A0EAB}.Release|Default.Build.0 = Release|Any CPU
 		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Debug|Any CPU.ActiveCfg = Debug|x86
 		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Debug|Default.ActiveCfg = Debug|x86
-		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Release|Any CPU.ActiveCfg = Release|x86
-		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Release|Default.ActiveCfg = Release|x86
+		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Release|Any CPU.ActiveCfg = Debug|x86
+		{32F72AB2-D6EA-442F-A9EB-3D76605E02D4}.Release|Default.ActiveCfg = Debug|x86
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

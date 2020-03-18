@@ -46,6 +46,7 @@
             this.createNodeTooltip = new System.Windows.Forms.ToolTip(this.components);
             this.ExecuteCypherRowsButton = new System.Windows.Forms.Button();
             this.CreateRelationshipsButton = new System.Windows.Forms.Button();
+            this.progressBar1 = new System.Windows.Forms.ProgressBar();
             this.SuspendLayout();
             // 
             // txtCypher
@@ -58,7 +59,7 @@
             this.txtCypher.Margin = new System.Windows.Forms.Padding(2);
             this.txtCypher.Multiline = true;
             this.txtCypher.Name = "txtCypher";
-            this.txtCypher.Size = new System.Drawing.Size(389, 206);
+            this.txtCypher.Size = new System.Drawing.Size(389, 176);
             this.txtCypher.TabIndex = 0;
             // 
             // btnExecute
@@ -140,10 +141,20 @@
             this.CreateRelationshipsButton.UseVisualStyleBackColor = true;
             this.CreateRelationshipsButton.Click += new System.EventHandler(this.CreateRelationshipsButton_Click);
             // 
+            // progressBar1
+            // 
+            this.progressBar1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.progressBar1.Location = new System.Drawing.Point(3, 210);
+            this.progressBar1.Name = "progressBar1";
+            this.progressBar1.Size = new System.Drawing.Size(383, 26);
+            this.progressBar1.TabIndex = 8;
+            // 
             // ExecuteQuery
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.Controls.Add(this.progressBar1);
             this.Controls.Add(this.ExecuteCypherRowsButton);
             this.Controls.Add(this.CreateNodeButton);
             this.Controls.Add(this.CreateRelationshipsButton);
@@ -178,5 +189,6 @@
         private System.Windows.Forms.ToolTip createNodeTooltip;
         private System.Windows.Forms.Button ExecuteCypherRowsButton;
         private System.Windows.Forms.Button CreateRelationshipsButton;
+        private System.Windows.Forms.ProgressBar progressBar1;
     }
 }
