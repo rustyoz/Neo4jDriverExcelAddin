@@ -1,11 +1,8 @@
 ﻿using Office = Microsoft.Office.Core;
-using Microsoft.Office.Interop.Excel;
 
 namespace Neo4jDriverExcelAddin
 {
     using System;
-    using System.Globalization;
-    using System.Linq;
     using Microsoft.Office.Interop.Excel;
     using Microsoft.Office.Tools;
     using Neo4j.Driver;
@@ -57,7 +54,7 @@ namespace Neo4jDriverExcelAddin
             var control = _customTaskPane.Control as ExecuteQuery;
             if (_connected == false)
             {
-                
+
                 ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
             }
             var session = _driver.AsyncSession();
@@ -89,11 +86,11 @@ namespace Neo4jDriverExcelAddin
                     }
                 }
 
-                
-                
+
+
                 for (int r = 2; r <= inputrange.Rows.Count; r++)
                 {
-                    control.progress.Report(r/ inputrange.Rows.Count*100);
+                    control.progress.Report(r / inputrange.Rows.Count * 100);
                     var row = inputrange.Rows[r];
                     var label = "";
                     try
@@ -112,14 +109,14 @@ namespace Neo4jDriverExcelAddin
 
                         if (properties[i - 2].Length > 0 && propval.Length > 0)
                         {
-                            cypher += "`"+properties[i - 2] + "`" + ": \"" + propval + "\",";
+                            cypher += "`" + properties[i - 2] + "`" + ": \"" + propval + "\",";
                         }
                     }
                     cypher = cypher.TrimEnd(',');
                     cypher += "})";
 
-                    
-                    
+
+
                     if (row.columns.count > 2)
                     {
                         cypher += " SET a += { ";
@@ -131,14 +128,14 @@ namespace Neo4jDriverExcelAddin
                             {
                                 if (properties[i - 2].Length > 0 && propval.Length > 0)
                                 {
-                                    cypher += "`"+properties[i - 2] + "`" + ": \"" + propval + "\",";
+                                    cypher += "`" + properties[i - 2] + "`" + ": \"" + propval + "\",";
                                 }
                             }
                         }
                         cypher = cypher.TrimEnd(',');
                         cypher += "}";
                     }
-                    
+
 
 
                     try
@@ -146,10 +143,10 @@ namespace Neo4jDriverExcelAddin
                         IResultCursor cursor = await session.RunAsync(cypher);
 
                         var records = await cursor.ToListAsync();
-                        
+
                         var summary = await cursor.ConsumeAsync();
                         string message = summary.ToString();
-                        if(r == inputrange.Rows.Count)
+                        if (r == inputrange.Rows.Count)
                         {
                             CurrentControl.SetMessage(message);
                         }
@@ -158,7 +155,7 @@ namespace Neo4jDriverExcelAddin
                     {
                         CurrentControl.SetMessage(ee.Message);
                     }
-                    
+
                 }
                 await session.CloseAsync();
 
@@ -356,21 +353,32 @@ namespace Neo4jDriverExcelAddin
                 var worksheet = ((Worksheet)Application.ActiveSheet);
                 var inputrange = e.SelectionRange;
 
-                
+
 
 
                 if (inputrange.Columns.Count <= 1)
                 {
                     CurrentControl.SetMessage("Select 3 columns with nodes and relationship to create");
+                    await session.CloseAsync();
+                    return;
                 }
                 if (inputrange.Rows.Count <= 2)
                 {
                     CurrentControl.SetMessage("Select 2 header rows and 1 data row");
+                    await session.CloseAsync();
+                    return;
                 }
 
-                string label1 = inputrange.Cells[1, 1].Value2.ToString();
-                string label2 = inputrange.Cells[1, 2].Value2.ToString();
-                string relationshiptype = inputrange.Cells[1, 3].Value2.ToString();
+                string label1 = Convert.ToString(inputrange.Cells[1, 1].Value2);
+                string label2 = Convert.ToString(inputrange.Cells[1, 2].Value2);
+                string relationshiptype = Convert.ToString(inputrange.Cells[1, 3].Value2);
+
+                if (label1.Length == 0 || label2.Length == 0 || relationshiptype.Length == 0)
+                {
+                    CurrentControl.SetMessage("Labels and relationship type must not be empty");
+                    await session.CloseAsync();
+                    return;
+                }
 
                 string[] properties = new string[inputrange.Columns.Count];
                 for (int i = 1; i <= inputrange.Columns.Count; i++)
@@ -390,20 +398,39 @@ namespace Neo4jDriverExcelAddin
                     var row = inputrange.Rows[r];
                     var input = inputrange;
 
-                    string cypher = "MATCH (a: {0}),(b: {1} ) WHERE a.`{2}` = '{3}' and b.`{4}` = '{5}' MERGE (a)-[r:{6}]->(b) {7}";
+                    string cypher = "MATCH (a: {0}),(b: {1} ) WHERE a.`{2}` = '{3}' and b.`{4}` = '{5}' MERGE (a)-[r:`{6}`]->(b) {7}";
+
+
                     string relprop = "";
-                    
-                    if (input.Cells[r, 3].Value2 != null && input.Cells[r,4].value2 != null)
+                    if (properties.Length > 2)
                     {
-                        
-                        string relpropname = input.Cells[r, 3].Value2;
-                        string relpropvalue = input.Cells[r, 4].Value2;
-                        if (relpropname.Length > 0 && relpropvalue.Length > 0)
+                        relprop = "SET r += { ";
+                        bool addcoma = false;
+                        for (int p = 2; p < properties.Length; p++ )
                         {
                             
-                            relprop = String.Format("SET r += {{ `{0}`: \"{1}\" }}", Convert.ToString(inputrange.Cells[r, 3].Value2), Convert.ToString(inputrange.Cells[r, 4].Value2));
+                            string propvalue = Convert.ToString(inputrange.Cells[r, p].Value2);
+                            if (properties[p].Length >0 && propvalue.Length>0)
+                            {
+                                string prop = "`{0}`:\"{1}\"";
+                                prop = String.Format(prop, properties[p], propvalue);
+                                if (addcoma)
+                                {
+                                    relprop += " , ";
+                                }
+                                addcoma = true;
+                                relprop += prop;
+                            }
+
+                           
+                        }
+                        relprop += " }";
+                        if (relprop.Length == "SET r += { ".Length)
+                        {
+                            relprop = "";
                         }
                     }
+                            
 
                     string formatedcypher = String.Format(
                     cypher,
@@ -427,22 +454,22 @@ namespace Neo4jDriverExcelAddin
                             CurrentControl.SetMessage(message);
                         }
                     }
-                    catch ( Exception ex)
+                    catch (Exception ex)
                     {
                         CurrentControl.SetMessage(ex.Message);
                     }
                 }
-                
+
                 await session.CloseAsync();
-                
 
 
-        }
+
+            }
             catch (Neo4jException ex)
             {
                 CurrentControl.SetMessage(ex.Message);
             }
-            
+
 
 
         }
