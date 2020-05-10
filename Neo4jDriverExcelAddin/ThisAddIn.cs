@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Office = Microsoft.Office.Core;
 
 namespace Neo4jDriverExcelAddin
@@ -305,33 +306,43 @@ namespace Neo4jDriverExcelAddin
         private async void ExecuteLoadAllNodes(object sender, SelectionArgs e)
         {
             string cypherGetAllNodes = "CALL db.labels()";
+            List<IRecord> records = await ExecuteCypherQuery(cypherGetAllNodes);
+            await CreateWorkSheet(records);
+
+        }
+
+        private async Task<List<IRecord>> ExecuteCypherQuery(string queryString)
+        {
             var session = _driver.AsyncSession();
+            List<IRecord> records = new List<IRecord>();
             try
             {
                 if (_connected == false)
                 {
                     var control = _customTaskPane.Control as ExecuteQuery;
-                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                    ConnectDatabase(this, new ConnectDatabaseArgs {ConnectionString = control.ConnectionString()});
                 }
 
-                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var worksheet = ((Worksheet) Application.ActiveSheet);
 
                 try
                 {
-                    IResultCursor cursor = await session.RunAsync(cypherGetAllNodes);
-                    var records = await cursor.ToListAsync();
-                    CreateWorkSheet(records);
-                    
+                    IResultCursor cursor = await session.RunAsync(queryString);
+                    records = await cursor.ToListAsync();
+
                     var summary = await cursor.ConsumeAsync();
                     string summaryText = summary.ToString();
 
                     CurrentControl.SetMessage("Execution Summary :" + "\n\n" + summaryText);
+                    return records;
 
                 }
                 finally
                 {
                     await session.CloseAsync();
+                    
                 }
+                
             }
             catch (Neo4jException ex)
             {
@@ -342,15 +353,19 @@ namespace Neo4jDriverExcelAddin
                 await session.CloseAsync();
             }
 
+            return records;
         }
 
-        private void CreateWorkSheet(List<IRecord> records)
+        private async Task CreateWorkSheet(List<IRecord> records)
         {
             var labels = GetAllLables(records);
             //RemoveWorksheet(labels);
             foreach (var wsName in labels)
             {
                var ws = CreateNewWorksheet(wsName);
+               string getAllNodesOfLabel = $"Match (n:{wsName}) Return n ";
+               List<IRecord> nodeRecords = await ExecuteCypherQuery(getAllNodesOfLabel);
+               LoadRowsFromRootNode(nodeRecords,ws); 
             }
             
         }
@@ -432,29 +447,34 @@ namespace Neo4jDriverExcelAddin
 
         private async void ExecuteCypher(object sender, ExecuteQueryArgs e)
         {
+            await ExecuteCypher(e.Cypher);
+        }
+
+        private async Task ExecuteCypher(string cypherQuery)
+        {
+            ExecuteQueryArgs e;
             var session = _driver.AsyncSession();
             try
             {
                 if (_connected == false)
                 {
                     var control = _customTaskPane.Control as ExecuteQuery;
-                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                    ConnectDatabase(this, new ConnectDatabaseArgs {ConnectionString = control.ConnectionString()});
                 }
 
-                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var worksheet = ((Worksheet) Application.ActiveSheet);
 
                 try
                 {
-                    IResultCursor cursor = await session.RunAsync(e.Cypher);
+                    IResultCursor cursor = await session.RunAsync(cypherQuery);
                     var records = await cursor.ToListAsync();
                     LoadRowsFromRecords(records, worksheet);
 
 
                     var summary = await cursor.ConsumeAsync();
                     string summaryText = summary.ToString();
-                   
-                    CurrentControl.SetMessage("Execution Summary :" + "\n\n" +  summaryText);
 
+                    CurrentControl.SetMessage("Execution Summary :" + "\n\n" + summaryText);
                 }
                 finally
                 {
@@ -469,9 +489,31 @@ namespace Neo4jDriverExcelAddin
             {
                 await session.CloseAsync();
             }
-
         }
 
+        private static void LoadRowsFromRootNode(List<IRecord> records, Worksheet worksheet)
+        {
+            bool isFirstRow = true;
+            int row = 2;
+            foreach (var r in records)
+            {
+                var node = r[0] as INode;
+                var properties = node.Properties;
+                int i = 0;
+                foreach (var k in properties.Keys)
+                {
+                    var colName = GetColNameFromIndex(i + 1);
+                    if (isFirstRow)
+                        worksheet.Range[$"{colName}1"].Value2 = k;
+                    worksheet.Range[$"{colName}{row}"].Value2 = properties[k].ToString();
+                    i++;
+
+                }
+
+                row++;
+                isFirstRow = false;
+            }
+        }
         private static void LoadRowsFromRecords(List<IRecord> records, Worksheet worksheet)
         {
             bool isFirstRow = true;
