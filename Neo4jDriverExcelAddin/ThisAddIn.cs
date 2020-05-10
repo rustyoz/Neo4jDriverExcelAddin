@@ -359,10 +359,10 @@ namespace Neo4jDriverExcelAddin
         private async Task CreateWorkSheet(List<IRecord> records)
         {
             var labels = GetAllLables(records);
-            //RemoveWorksheet(labels);
+            
             foreach (var wsName in labels)
             {
-               var ws = CreateNewWorksheet(wsName);
+               var ws = GetOrCreateWorksheet(wsName);
                string getAllNodesOfLabel = $"Match (n:{wsName}) Return n ";
                List<IRecord> nodeRecords = await ExecuteCypherQuery(getAllNodesOfLabel);
                LoadRowsFromRootNode(nodeRecords,ws); 
@@ -383,27 +383,23 @@ namespace Neo4jDriverExcelAddin
             return labels;
         }
 
-        private void RemoveWorksheet(List<string> wsNames)
+        private Worksheet GetOrCreateWorksheet(string wsName)
         {
             Sheets allSheets = Application.Sheets;
             Application.ActiveWorkbook.Save();
             int count = allSheets.Count;
-
-            for (int i = 0; i < count; i++)
+            
+            for (int i = 1; i <= count; i++)
             {
                 try
                 {
-                    var s = ((Worksheet)this.Application.Sheets[i]);
+                    var s = (Worksheet)Application.Worksheets[i];
 
                     Debug.Print(s.Name);
-                    if (wsNames.Contains(s.Name))
+                    if (wsName == s.Name)
                     {
-                        if (allSheets.Count == 1)
-                        {
-                            CreateNewWorksheet("NewSheet");
-                        }
-                        s.Delete();
-
+                        s.Cells.Clear();
+                        return s;
                     }
                 }
                 catch (Exception e)
@@ -413,6 +409,8 @@ namespace Neo4jDriverExcelAddin
                 }
                 
             }
+
+            return CreateNewWorksheet(wsName);
         }
 
         private Worksheet CreateNewWorksheet(string wsName)
@@ -503,10 +501,12 @@ namespace Neo4jDriverExcelAddin
                 int i = 0;
                 foreach (var k in properties.Keys)
                 {
+                    isFirstRow = false;
                     if (!propertiesIndex.TryGetValue(k, out i))
                     {
                         i = propertiesIndex.Count;
                         propertiesIndex.Add(k,i);
+                        isFirstRow = true;
                     }
 
                     var colName = GetColNameFromIndex(i + 1);
