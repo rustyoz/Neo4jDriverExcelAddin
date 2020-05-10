@@ -1,4 +1,6 @@
 ﻿using System.Collections.Generic;
+using System.Configuration;
+using System.Diagnostics;
 using Office = Microsoft.Office.Core;
 
 namespace Neo4jDriverExcelAddin
@@ -10,6 +12,7 @@ namespace Neo4jDriverExcelAddin
 
     public partial class ThisAddIn
     {
+        private const string defaultConnection = "bolt://localhost:7687/";
         private CustomTaskPane _customTaskPane;
         private IDriver _driver;
         private Boolean _connected;
@@ -37,17 +40,19 @@ namespace Neo4jDriverExcelAddin
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-
+            ConnectDatabase(defaultConnection);
         }
 
         private void ConnectDatabase(object sender, ConnectDatabaseArgs e)
         {
+            ConnectDatabase(e.ConnectionString);
+        }
 
-            _driver = GraphDatabase.Driver(new Uri(e.ConnectionString));
+        private void ConnectDatabase(string connectionString)
+        {
+            _driver = GraphDatabase.Driver(new Uri(connectionString));
             _connected = true;
-            //session = _driver.AsyncSession(o => o.WithDatabase("neo4j"));
-
-
+            //todo : Add serialization code here.
         }
 
         private async void CreateNodes(object sender, SelectionArgs e)
@@ -269,6 +274,10 @@ namespace Neo4jDriverExcelAddin
                 executeQueryControl.CreateNodes += CreateNodes;
                 executeQueryControl.ExecuteSelection += ExecuteSelection;
                 executeQueryControl.CreateRelationships += CreateRelationships;
+                executeQueryControl.LoadButtonEventHandler += LoadAllNodes;
+                executeQueryControl.UpdateButtonEventHandler += UpdateAllNodes;
+
+
                 _customTaskPane = CustomTaskPanes.Add(executeQueryControl, "Execute Query");
 
                 _customTaskPane.Visible = true;
@@ -278,6 +287,125 @@ namespace Neo4jDriverExcelAddin
             {
                 return null;
             }
+        }
+
+        private void UpdateAllNodes(object sender, SelectionArgs e)
+        {
+            CurrentControl.SetMessage("Update DB Nodes");
+
+        }
+
+        private void LoadAllNodes(object sender, SelectionArgs e)
+        {
+            ExecuteLoadAllNodes(sender, e);
+
+            CurrentControl.SetMessage("Load All Nodes");
+        }
+
+        private async void ExecuteLoadAllNodes(object sender, SelectionArgs e)
+        {
+            string cypherGetAllNodes = "CALL db.labels()";
+            var session = _driver.AsyncSession();
+            try
+            {
+                if (_connected == false)
+                {
+                    var control = _customTaskPane.Control as ExecuteQuery;
+                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                }
+
+                var worksheet = ((Worksheet)Application.ActiveSheet);
+
+                try
+                {
+                    IResultCursor cursor = await session.RunAsync(cypherGetAllNodes);
+                    var records = await cursor.ToListAsync();
+                    CreateWorkSheet(records);
+                    
+                    var summary = await cursor.ConsumeAsync();
+                    string summaryText = summary.ToString();
+
+                    CurrentControl.SetMessage("Execution Summary :" + "\n\n" + summaryText);
+
+                }
+                finally
+                {
+                    await session.CloseAsync();
+                }
+            }
+            catch (Neo4jException ex)
+            {
+                CurrentControl.SetMessage(ex.Message);
+            }
+            finally
+            {
+                await session.CloseAsync();
+            }
+
+        }
+
+        private void CreateWorkSheet(List<IRecord> records)
+        {
+            var labels = GetAllLables(records);
+            //RemoveWorksheet(labels);
+            foreach (var wsName in labels)
+            {
+               var ws = CreateNewWorksheet(wsName);
+            }
+            
+        }
+
+        private  List<string> GetAllLables(List<IRecord> records)
+        {
+            List<string> labels = new List<string>();
+            if (records != null)
+            {
+                foreach (var r in records)
+                {
+                    labels.Add(r[0].ToString());
+                }
+            }
+            return labels;
+        }
+
+        private void RemoveWorksheet(List<string> wsNames)
+        {
+            Sheets allSheets = Application.Sheets;
+            Application.ActiveWorkbook.Save();
+            int count = allSheets.Count;
+
+            for (int i = 0; i < count; i++)
+            {
+                try
+                {
+                    var s = ((Worksheet)this.Application.Sheets[i]);
+
+                    Debug.Print(s.Name);
+                    if (wsNames.Contains(s.Name))
+                    {
+                        if (allSheets.Count == 1)
+                        {
+                            CreateNewWorksheet("NewSheet");
+                        }
+                        s.Delete();
+
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    throw;
+                }
+                
+            }
+        }
+
+        private Worksheet CreateNewWorksheet(string wsName)
+        {
+            var newSheet = (Worksheet) Application.Sheets.Add();
+            newSheet.Name = wsName;
+            Debug.Print(wsName);
+            return newSheet;
         }
 
         internal ExecuteQuery CurrentControl => _customTaskPane.Control as ExecuteQuery;

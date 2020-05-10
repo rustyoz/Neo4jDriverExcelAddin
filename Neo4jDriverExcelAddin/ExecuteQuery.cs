@@ -86,5 +86,14 @@
             CreateRelationships?.Invoke(this, new SelectionArgs { SelectionRange = Globals.ThisAddIn.Application.ActiveWindow.RangeSelection });
         }
 
+        private void UpdateButton_Click(object sender, EventArgs e)
+        {
+            UpdateButtonEventHandler?.Invoke(this, new SelectionArgs { SelectionRange = Globals.ThisAddIn.Application.ActiveWindow.RangeSelection });
+        }
+
+        private void LoadButton_Click(object sender, EventArgs e)
+        {
+            LoadButtonEventHandler?.Invoke(this, new SelectionArgs { SelectionRange = Globals.ThisAddIn.Application.ActiveWindow.RangeSelection });
+        }
     }
 }
