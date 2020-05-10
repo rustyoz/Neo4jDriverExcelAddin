@@ -1,4 +1,5 @@
-﻿using Office = Microsoft.Office.Core;
+﻿using System.Collections.Generic;
+using Office = Microsoft.Office.Core;
 
 namespace Neo4jDriverExcelAddin
 {
@@ -318,10 +319,13 @@ namespace Neo4jDriverExcelAddin
                 {
                     IResultCursor cursor = await session.RunAsync(e.Cypher);
                     var records = await cursor.ToListAsync();
+                    LoadRowsFromRecords(records, worksheet);
+
 
                     var summary = await cursor.ConsumeAsync();
-                    string message = summary.ToString();
-                    CurrentControl.SetMessage(message);
+                    string summaryText = summary.ToString();
+                   
+                    CurrentControl.SetMessage("Execution Summary :" + "\n\n" +  summaryText);
 
                 }
                 finally
@@ -338,6 +342,26 @@ namespace Neo4jDriverExcelAddin
                 await session.CloseAsync();
             }
 
+        }
+
+        private static void LoadRowsFromRecords(List<IRecord> records, Worksheet worksheet)
+        {
+            bool isFirstRow = true;
+            int row = 2;
+            foreach (var r in records)
+            {
+                for (int i = 0; i < r.Keys.Count; i++)
+                {
+                    var colName = GetColNameFromIndex(i + 1);
+                    var key = r.Keys[i];
+                    if (isFirstRow)
+                        worksheet.Range[$"{colName}1"].Value2 = key;
+                    worksheet.Range[$"{colName}{row}"].Value2 = r.Values[key].As<string>();
+                }
+
+                row++;
+                isFirstRow = false;
+            }
         }
 
         private async void CreateRelationships(object sender, SelectionArgs e)
