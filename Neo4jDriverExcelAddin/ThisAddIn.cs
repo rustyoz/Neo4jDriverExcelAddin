@@ -495,6 +495,7 @@ namespace Neo4jDriverExcelAddin
         {
             bool isFirstRow = true;
             int row = 2;
+            Dictionary<string, int> propertiesIndex = new Dictionary<string, int>();
             foreach (var r in records)
             {
                 var node = r[0] as INode;
@@ -502,12 +503,17 @@ namespace Neo4jDriverExcelAddin
                 int i = 0;
                 foreach (var k in properties.Keys)
                 {
+                    if (!propertiesIndex.TryGetValue(k, out i))
+                    {
+                        i = propertiesIndex.Count;
+                        propertiesIndex.Add(k,i);
+                    }
+
                     var colName = GetColNameFromIndex(i + 1);
                     if (isFirstRow)
                         worksheet.Range[$"{colName}1"].Value2 = k;
                     worksheet.Range[$"{colName}{row}"].Value2 = properties[k].ToString();
-                    i++;
-
+                    
                 }
 
                 row++;
