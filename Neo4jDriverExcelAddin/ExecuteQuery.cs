@@ -95,5 +95,25 @@
         {
             LoadButtonEventHandler?.Invoke(this, new SelectionArgs { SelectionRange = Globals.ThisAddIn.Application.ActiveWindow.RangeSelection });
         }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void progressBar1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void txtNeoResponse_TextChanged(object sender, EventArgs e)
+        {
+
+        }
+
+        private void SyncAllButton_Click(object sender, EventArgs e)
+        {
+            SyncAllButtonEventHandler?.Invoke(this,EventArgs.Empty);
+        }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using System.Collections.Generic;
 using System.Configuration;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading.Tasks;
 using Office = Microsoft.Office.Core;
 
@@ -178,6 +179,148 @@ namespace Neo4jDriverExcelAddin
 
         }
 
+        private async void UpdateActiveWorksheet(object sender, SelectionArgs e)
+        {
+            var control = _customTaskPane.Control as ExecuteQuery;
+            if (_connected == false)
+            {
+
+                ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+            }
+            var session = _driver.AsyncSession();
+            try
+            {
+                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var inputrange = e.SelectionRange;
+                inputrange = worksheet.UsedRange;
+                int indexOfIdentifier = 0;
+
+                control.progress.Report(0);
+
+                if (inputrange.Columns.Count <= 1)
+                {
+                    CurrentControl.SetMessage("Select more than 1 column");
+                }
+
+               
+                string[] properties = new string[inputrange.Columns.Count];
+                for (int i = 0; i < inputrange.Columns.Count; i++)
+                {
+                    int excelIndex = i + 1;
+                    try
+                    {
+                        string colName = Convert.ToString(inputrange.Cells[1, excelIndex].Value2);
+                        properties[i] = colName;
+                        string s = colName.ToLowerInvariant();
+                        if (s == "uuid" )
+                        {
+                            indexOfIdentifier = i;
+                        }
+                    }
+                    catch
+                    {
+                        properties[i - 2] = "property" + (i - 1).ToString();
+                    }
+                }
+
+
+                for (int r = 2; r <= inputrange.Rows.Count; r++)
+                {
+                    control.progress.Report(r / inputrange.Rows.Count * 100);
+                    var row = inputrange.Rows[r];
+                    var label = "";
+                    try
+                    {
+                        label = row.Cells[1, 1].Value2.ToString();
+                        label = worksheet.Name;
+                    }
+                    catch
+                    {
+                        label = "NewExcelNode";
+                    }
+
+                    string cypher = "MERGE (a: " + label + " { ";
+
+                    {
+                        cypher += GetIdentifierPropertyValue(row, properties, indexOfIdentifier);
+                    }
+                    cypher = cypher.TrimEnd(',');
+                    cypher += "})";
+
+                    // check if worksheet have 1 property column + 1 data column
+                    if (row.columns.count > 1)
+                    {
+                        cypher += " SET a += { ";
+                        for (int i = 0; i < row.Columns.Count; i++)
+                        {
+                            int excelIndex = i + 1;
+                            // Skip first record as it is used in Merge identifier.
+                            if (i == indexOfIdentifier)
+                            {
+                                continue;
+                            }
+                            string secondRecordValue = Convert.ToString(row.Cells[1, excelIndex].Value2);
+
+                            if (properties[i] != null && secondRecordValue != null)
+                            {
+                                if (properties[i].Length > 0 && secondRecordValue.Length > 0)
+                                {
+                                    cypher += "`" + properties[i] + "`" + ": \"" + secondRecordValue + "\",";
+                                }
+                            }
+                        }
+                        cypher = cypher.TrimEnd(',');
+                        cypher += "}";
+                    }
+
+
+
+                    try
+                    {
+                        IResultCursor cursor = await session.RunAsync(cypher);
+
+                        var records = await cursor.ToListAsync();
+
+                        var summary = await cursor.ConsumeAsync();
+                        string message = summary.ToString();
+                        if (r == inputrange.Rows.Count)
+                        {
+                            CurrentControl.SetMessage(message);
+                        }
+                    }
+                    catch (Neo4jException ee)
+                    {
+                        CurrentControl.SetMessage(ee.Message);
+                    }
+
+                }
+                await session.CloseAsync();
+
+            }
+            catch (Neo4jException ex)
+            {
+                CurrentControl.SetMessage(ex.Message);
+            }
+
+
+        }
+
+        private static string GetIdentifierPropertyValue(dynamic row, string[] properties, int indexId)
+        {
+            if (properties == null || properties.Length < 1)
+                return "";
+
+            string propval = Convert.ToString(row.Cells[1,indexId + 1].Value2);
+
+            string idetifierText = "";
+            if (properties[indexId].Length > 0 && propval.Length > 0)
+            {
+                idetifierText += "`" + properties[indexId] + "`" + ": \"" + propval + "\",";
+            }
+
+            return idetifierText;
+        }
+
         private async void ExecuteSelection(object sender, SelectionArgs e)
         {
             var session = _driver.AsyncSession();
@@ -276,6 +419,7 @@ namespace Neo4jDriverExcelAddin
                 executeQueryControl.ExecuteSelection += ExecuteSelection;
                 executeQueryControl.CreateRelationships += CreateRelationships;
                 executeQueryControl.LoadButtonEventHandler += LoadAllNodes;
+                executeQueryControl.SyncAllButtonEventHandler += SyncAllNodes;
                 executeQueryControl.UpdateButtonEventHandler += UpdateAllNodes;
 
 
@@ -290,24 +434,39 @@ namespace Neo4jDriverExcelAddin
             }
         }
 
+        private void SyncAllNodes(object sender, EventArgs e)
+        {
+            ExecuteLoadAllNodes();
+            CurrentControl.SetMessage("SYNC");
+        }
+
         private void UpdateAllNodes(object sender, SelectionArgs e)
         {
-            CurrentControl.SetMessage("Update DB Nodes");
+            CurrentControl.SetMessage("PUSH");
+            UpdateActiveWorksheet(sender, e);
 
         }
 
         private void LoadAllNodes(object sender, SelectionArgs e)
         {
-            ExecuteLoadAllNodes(sender, e);
-
-            CurrentControl.SetMessage("Load All Nodes");
+            //ExecuteLoadAllNodes(sender, e);
+            ExecuteLoadActiveWorksheet(sender, e);
+            CurrentControl.SetMessage("PULL");
         }
 
-        private async void ExecuteLoadAllNodes(object sender, SelectionArgs e)
+        private async void ExecuteLoadAllNodes()
         {
             string cypherGetAllNodes = "CALL db.labels()";
             List<IRecord> records = await ExecuteCypherQuery(cypherGetAllNodes);
             await CreateWorkSheet(records);
+
+        }
+
+        private async void ExecuteLoadActiveWorksheet(object sender, SelectionArgs e)
+        {
+            var wsName = ((Worksheet)Application.ActiveSheet).Name;
+            List<string> labels = new List<string> {wsName};
+            await CreateWorksheet(labels);
 
         }
 
@@ -359,15 +518,19 @@ namespace Neo4jDriverExcelAddin
         private async Task CreateWorkSheet(List<IRecord> records)
         {
             var labels = GetAllLables(records);
-            
+
+            await CreateWorksheet(labels);
+        }
+
+        private async Task CreateWorksheet(List<string> labels)
+        {
             foreach (var wsName in labels)
             {
-               var ws = GetOrCreateWorksheet(wsName);
-               string getAllNodesOfLabel = $"Match (n:{wsName}) Return n ";
-               List<IRecord> nodeRecords = await ExecuteCypherQuery(getAllNodesOfLabel);
-               LoadRowsFromRootNode(nodeRecords,ws); 
+                var ws = GetOrCreateWorksheet(wsName);
+                string getAllNodesOfLabel = $"Match (n:{wsName}) Return n ";
+                List<IRecord> nodeRecords = await ExecuteCypherQuery(getAllNodesOfLabel);
+                LoadRowsFromRootNode(nodeRecords, ws);
             }
-            
         }
 
         private  List<string> GetAllLables(List<IRecord> records)

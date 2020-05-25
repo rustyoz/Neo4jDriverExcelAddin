@@ -50,6 +50,7 @@
             this.groupBox1 = new System.Windows.Forms.GroupBox();
             this.LoadButton = new System.Windows.Forms.Button();
             this.UpdateButton = new System.Windows.Forms.Button();
+            this.SyncAllButton = new System.Windows.Forms.Button();
             this.groupBox1.SuspendLayout();
             this.SuspendLayout();
             // 
@@ -89,6 +90,7 @@
             this.txtNeoResponse.ReadOnly = true;
             this.txtNeoResponse.Size = new System.Drawing.Size(634, 135);
             this.txtNeoResponse.TabIndex = 2;
+            this.txtNeoResponse.TextChanged += new System.EventHandler(this.txtNeoResponse_TextChanged);
             // 
             // connectionaddress
             // 
@@ -96,7 +98,7 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.connectionaddress.Location = new System.Drawing.Point(3, 4);
             this.connectionaddress.Name = "connectionaddress";
-            this.connectionaddress.Size = new System.Drawing.Size(503, 20);
+            this.connectionaddress.Size = new System.Drawing.Size(487, 20);
             this.connectionaddress.TabIndex = 3;
             this.connectionaddress.Text = "bolt://localhost:7687/";
             // 
@@ -121,10 +123,6 @@
             this.CreateNodeButton.Text = "Create Nodes";
             this.CreateNodeButton.UseVisualStyleBackColor = true;
             this.CreateNodeButton.Click += new System.EventHandler(this.CreateNodeButton_Click);
-            // 
-            // createNodeTooltip
-            // 
-           
             // 
             // ExecuteCypherRowsButton
             // 
@@ -153,17 +151,19 @@
             // 
             this.progressBar1.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.progressBar1.Location = new System.Drawing.Point(610, 19);
+            this.progressBar1.Enabled = false;
+            this.progressBar1.Location = new System.Drawing.Point(496, 4);
             this.progressBar1.Name = "progressBar1";
-            this.progressBar1.Size = new System.Drawing.Size(24, 20);
+            this.progressBar1.Size = new System.Drawing.Size(10, 20);
             this.progressBar1.TabIndex = 8;
+            this.progressBar1.Click += new System.EventHandler(this.progressBar1_Click);
             // 
             // groupBox1
             // 
+            this.groupBox1.Controls.Add(this.SyncAllButton);
             this.groupBox1.Controls.Add(this.LoadButton);
             this.groupBox1.Controls.Add(this.UpdateButton);
             this.groupBox1.Controls.Add(this.CreateNodeButton);
-            this.groupBox1.Controls.Add(this.progressBar1);
             this.groupBox1.Controls.Add(this.CreateRelationshipsButton);
             this.groupBox1.Controls.Add(this.ExecuteCypherRowsButton);
             this.groupBox1.Controls.Add(this.btnExecute);
@@ -173,7 +173,6 @@
             this.groupBox1.TabIndex = 9;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Controls";
-            
             // 
             // LoadButton
             // 
@@ -183,7 +182,7 @@
             this.LoadButton.Name = "LoadButton";
             this.LoadButton.Size = new System.Drawing.Size(109, 47);
             this.LoadButton.TabIndex = 10;
-            this.LoadButton.Text = "Load";
+            this.LoadButton.Text = "Pull";
             this.LoadButton.UseVisualStyleBackColor = true;
             this.LoadButton.Click += new System.EventHandler(this.LoadButton_Click);
             // 
@@ -195,9 +194,21 @@
             this.UpdateButton.Name = "UpdateButton";
             this.UpdateButton.Size = new System.Drawing.Size(109, 47);
             this.UpdateButton.TabIndex = 9;
-            this.UpdateButton.Text = "Update";
+            this.UpdateButton.Text = "Push";
             this.UpdateButton.UseVisualStyleBackColor = true;
             this.UpdateButton.Click += new System.EventHandler(this.UpdateButton_Click);
+            // 
+            // SyncAllButton
+            // 
+            this.SyncAllButton.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.SyncAllButton.Location = new System.Drawing.Point(359, 72);
+            this.SyncAllButton.Margin = new System.Windows.Forms.Padding(2);
+            this.SyncAllButton.Name = "SyncAllButton";
+            this.SyncAllButton.Size = new System.Drawing.Size(109, 47);
+            this.SyncAllButton.TabIndex = 11;
+            this.SyncAllButton.Text = "Sync All";
+            this.SyncAllButton.UseVisualStyleBackColor = true;
+            this.SyncAllButton.Click += new System.EventHandler(this.SyncAllButton_Click);
             // 
             // ExecuteQuery
             // 
@@ -207,6 +218,7 @@
             this.Controls.Add(this.connectButton);
             this.Controls.Add(this.connectionaddress);
             this.Controls.Add(this.txtNeoResponse);
+            this.Controls.Add(this.progressBar1);
             this.Controls.Add(this.txtCypher);
             this.Margin = new System.Windows.Forms.Padding(2);
             this.Name = "ExecuteQuery";
@@ -228,6 +240,7 @@
         internal EventHandler<SelectionArgs> ExecuteSelection;
         internal EventHandler<SelectionArgs> CreateRelationships;
         internal EventHandler<SelectionArgs> LoadButtonEventHandler;
+        internal EventHandler SyncAllButtonEventHandler;
         internal EventHandler<SelectionArgs> UpdateButtonEventHandler;
 
         private System.Windows.Forms.TextBox txtNeoResponse;
@@ -241,5 +254,6 @@
         private System.Windows.Forms.GroupBox groupBox1;
         private System.Windows.Forms.Button UpdateButton;
         private System.Windows.Forms.Button LoadButton;
+        private System.Windows.Forms.Button SyncAllButton;
     }
 }
