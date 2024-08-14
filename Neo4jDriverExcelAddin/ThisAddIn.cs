@@ -1,4 +1,9 @@
-﻿using Office = Microsoft.Office.Core;
+﻿using System.Collections.Generic;
+using System.Configuration;
+using System.Diagnostics;
+using System.Linq;
+using System.Threading.Tasks;
+using Office = Microsoft.Office.Core;
 
 namespace Neo4jDriverExcelAddin
 {
@@ -9,6 +14,7 @@ namespace Neo4jDriverExcelAddin
 
     public partial class ThisAddIn
     {
+        private const string defaultConnection = "bolt://localhost:7687/";
         private CustomTaskPane _customTaskPane;
         private IDriver _driver;
         private Boolean _connected;
@@ -36,17 +42,19 @@ namespace Neo4jDriverExcelAddin
 
         private void ThisAddIn_Startup(object sender, EventArgs e)
         {
-
+            ConnectDatabase(defaultConnection);
         }
 
         private void ConnectDatabase(object sender, ConnectDatabaseArgs e)
         {
+            ConnectDatabase(e.ConnectionString);
+        }
 
-            _driver = GraphDatabase.Driver(new Uri(e.ConnectionString));
+        private void ConnectDatabase(string connectionString)
+        {
+            _driver = GraphDatabase.Driver(new Uri(connectionString));
             _connected = true;
-            //session = _driver.AsyncSession(o => o.WithDatabase("neo4j"));
-
-
+            //todo : Add serialization code here.
         }
 
         private async void CreateNodes(object sender, SelectionArgs e)
@@ -171,6 +179,148 @@ namespace Neo4jDriverExcelAddin
 
         }
 
+        private async void UpdateActiveWorksheet(object sender, SelectionArgs e)
+        {
+            var control = _customTaskPane.Control as ExecuteQuery;
+            if (_connected == false)
+            {
+
+                ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+            }
+            var session = _driver.AsyncSession();
+            try
+            {
+                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var inputrange = e.SelectionRange;
+                inputrange = worksheet.UsedRange;
+                int indexOfIdentifier = 0;
+
+                control.progress.Report(0);
+
+                if (inputrange.Columns.Count <= 1)
+                {
+                    CurrentControl.SetMessage("Select more than 1 column");
+                }
+
+               
+                string[] properties = new string[inputrange.Columns.Count];
+                for (int i = 0; i < inputrange.Columns.Count; i++)
+                {
+                    int excelIndex = i + 1;
+                    try
+                    {
+                        string colName = Convert.ToString(inputrange.Cells[1, excelIndex].Value2);
+                        properties[i] = colName;
+                        string s = colName.ToLowerInvariant();
+                        if (s == "uuid" )
+                        {
+                            indexOfIdentifier = i;
+                        }
+                    }
+                    catch
+                    {
+                        properties[i - 2] = "property" + (i - 1).ToString();
+                    }
+                }
+
+
+                for (int r = 2; r <= inputrange.Rows.Count; r++)
+                {
+                    control.progress.Report(r / inputrange.Rows.Count * 100);
+                    var row = inputrange.Rows[r];
+                    var label = "";
+                    try
+                    {
+                        label = row.Cells[1, 1].Value2.ToString();
+                        label = worksheet.Name;
+                    }
+                    catch
+                    {
+                        label = "NewExcelNode";
+                    }
+
+                    string cypher = "MERGE (a: " + label + " { ";
+
+                    {
+                        cypher += GetIdentifierPropertyValue(row, properties, indexOfIdentifier);
+                    }
+                    cypher = cypher.TrimEnd(',');
+                    cypher += "})";
+
+                    // check if worksheet have 1 property column + 1 data column
+                    if (row.columns.count > 1)
+                    {
+                        cypher += " SET a += { ";
+                        for (int i = 0; i < row.Columns.Count; i++)
+                        {
+                            int excelIndex = i + 1;
+                            // Skip first record as it is used in Merge identifier.
+                            if (i == indexOfIdentifier)
+                            {
+                                continue;
+                            }
+                            string secondRecordValue = Convert.ToString(row.Cells[1, excelIndex].Value2);
+
+                            if (properties[i] != null && secondRecordValue != null)
+                            {
+                                if (properties[i].Length > 0 && secondRecordValue.Length > 0)
+                                {
+                                    cypher += "`" + properties[i] + "`" + ": \"" + secondRecordValue + "\",";
+                                }
+                            }
+                        }
+                        cypher = cypher.TrimEnd(',');
+                        cypher += "}";
+                    }
+
+
+
+                    try
+                    {
+                        IResultCursor cursor = await session.RunAsync(cypher);
+
+                        var records = await cursor.ToListAsync();
+
+                        var summary = await cursor.ConsumeAsync();
+                        string message = summary.ToString();
+                        if (r == inputrange.Rows.Count)
+                        {
+                            CurrentControl.SetMessage(message);
+                        }
+                    }
+                    catch (Neo4jException ee)
+                    {
+                        CurrentControl.SetMessage(ee.Message);
+                    }
+
+                }
+                await session.CloseAsync();
+
+            }
+            catch (Neo4jException ex)
+            {
+                CurrentControl.SetMessage(ex.Message);
+            }
+
+
+        }
+
+        private static string GetIdentifierPropertyValue(dynamic row, string[] properties, int indexId)
+        {
+            if (properties == null || properties.Length < 1)
+                return "";
+
+            string propval = Convert.ToString(row.Cells[1,indexId + 1].Value2);
+
+            string idetifierText = "";
+            if (properties[indexId].Length > 0 && propval.Length > 0)
+            {
+                idetifierText += "`" + properties[indexId] + "`" + ": \"" + propval + "\",";
+            }
+
+            return idetifierText;
+        }
+
         private async void ExecuteSelection(object sender, SelectionArgs e)
         {
             var session = _driver.AsyncSession();
@@ -268,6 +418,11 @@ namespace Neo4jDriverExcelAddin
                 executeQueryControl.CreateNodes += CreateNodes;
                 executeQueryControl.ExecuteSelection += ExecuteSelection;
                 executeQueryControl.CreateRelationships += CreateRelationships;
+                executeQueryControl.LoadButtonEventHandler += LoadAllNodes;
+                executeQueryControl.SyncAllButtonEventHandler += SyncAllNodes;
+                executeQueryControl.UpdateButtonEventHandler += UpdateAllNodes;
+
+
                 _customTaskPane = CustomTaskPanes.Add(executeQueryControl, "Execute Query");
 
                 _customTaskPane.Visible = true;
@@ -277,6 +432,156 @@ namespace Neo4jDriverExcelAddin
             {
                 return null;
             }
+        }
+
+        private void SyncAllNodes(object sender, EventArgs e)
+        {
+            ExecuteLoadAllNodes();
+            CurrentControl.SetMessage("SYNC");
+        }
+
+        private void UpdateAllNodes(object sender, SelectionArgs e)
+        {
+            CurrentControl.SetMessage("PUSH");
+            UpdateActiveWorksheet(sender, e);
+
+        }
+
+        private void LoadAllNodes(object sender, SelectionArgs e)
+        {
+            //ExecuteLoadAllNodes(sender, e);
+            ExecuteLoadActiveWorksheet(sender, e);
+            CurrentControl.SetMessage("PULL");
+        }
+
+        private async void ExecuteLoadAllNodes()
+        {
+            string cypherGetAllNodes = "CALL db.labels()";
+            List<IRecord> records = await ExecuteCypherQuery(cypherGetAllNodes);
+            await CreateWorkSheet(records);
+
+        }
+
+        private async void ExecuteLoadActiveWorksheet(object sender, SelectionArgs e)
+        {
+            var wsName = ((Worksheet)Application.ActiveSheet).Name;
+            List<string> labels = new List<string> {wsName};
+            await CreateWorksheet(labels);
+
+        }
+
+        private async Task<List<IRecord>> ExecuteCypherQuery(string queryString)
+        {
+            var session = _driver.AsyncSession();
+            List<IRecord> records = new List<IRecord>();
+            try
+            {
+                if (_connected == false)
+                {
+                    var control = _customTaskPane.Control as ExecuteQuery;
+                    ConnectDatabase(this, new ConnectDatabaseArgs {ConnectionString = control.ConnectionString()});
+                }
+
+                var worksheet = ((Worksheet) Application.ActiveSheet);
+
+                try
+                {
+                    IResultCursor cursor = await session.RunAsync(queryString);
+                    records = await cursor.ToListAsync();
+
+                    var summary = await cursor.ConsumeAsync();
+                    string summaryText = summary.ToString();
+
+                    CurrentControl.SetMessage("Execution Summary :" + "\n\n" + summaryText);
+                    return records;
+
+                }
+                finally
+                {
+                    await session.CloseAsync();
+                    
+                }
+                
+            }
+            catch (Neo4jException ex)
+            {
+                CurrentControl.SetMessage(ex.Message);
+            }
+            finally
+            {
+                await session.CloseAsync();
+            }
+
+            return records;
+        }
+
+        private async Task CreateWorkSheet(List<IRecord> records)
+        {
+            var labels = GetAllLables(records);
+
+            await CreateWorksheet(labels);
+        }
+
+        private async Task CreateWorksheet(List<string> labels)
+        {
+            foreach (var wsName in labels)
+            {
+                var ws = GetOrCreateWorksheet(wsName);
+                string getAllNodesOfLabel = $"Match (n:{wsName}) Return n ";
+                List<IRecord> nodeRecords = await ExecuteCypherQuery(getAllNodesOfLabel);
+                LoadRowsFromRootNode(nodeRecords, ws);
+            }
+        }
+
+        private  List<string> GetAllLables(List<IRecord> records)
+        {
+            List<string> labels = new List<string>();
+            if (records != null)
+            {
+                foreach (var r in records)
+                {
+                    labels.Add(r[0].ToString());
+                }
+            }
+            return labels;
+        }
+
+        private Worksheet GetOrCreateWorksheet(string wsName)
+        {
+            Sheets allSheets = Application.Sheets;
+            Application.ActiveWorkbook.Save();
+            int count = allSheets.Count;
+            
+            for (int i = 1; i <= count; i++)
+            {
+                try
+                {
+                    var s = (Worksheet)Application.Worksheets[i];
+
+                    Debug.Print(s.Name);
+                    if (wsName == s.Name)
+                    {
+                        s.Cells.Clear();
+                        return s;
+                    }
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine(e);
+                    throw;
+                }
+                
+            }
+
+            return CreateNewWorksheet(wsName);
+        }
+
+        private Worksheet CreateNewWorksheet(string wsName)
+        {
+            var newSheet = (Worksheet) Application.Sheets.Add();
+            newSheet.Name = wsName;
+            Debug.Print(wsName);
+            return newSheet;
         }
 
         internal ExecuteQuery CurrentControl => _customTaskPane.Control as ExecuteQuery;
@@ -303,26 +608,34 @@ namespace Neo4jDriverExcelAddin
 
         private async void ExecuteCypher(object sender, ExecuteQueryArgs e)
         {
+            await ExecuteCypher(e.Cypher);
+        }
+
+        private async Task ExecuteCypher(string cypherQuery)
+        {
+            ExecuteQueryArgs e;
             var session = _driver.AsyncSession();
             try
             {
                 if (_connected == false)
                 {
                     var control = _customTaskPane.Control as ExecuteQuery;
-                    ConnectDatabase(this, new ConnectDatabaseArgs { ConnectionString = control.ConnectionString() });
+                    ConnectDatabase(this, new ConnectDatabaseArgs {ConnectionString = control.ConnectionString()});
                 }
 
-                var worksheet = ((Worksheet)Application.ActiveSheet);
+                var worksheet = ((Worksheet) Application.ActiveSheet);
 
                 try
                 {
-                    IResultCursor cursor = await session.RunAsync(e.Cypher);
+                    IResultCursor cursor = await session.RunAsync(cypherQuery);
                     var records = await cursor.ToListAsync();
+                    LoadRowsFromRecords(records, worksheet);
+
 
                     var summary = await cursor.ConsumeAsync();
-                    string message = summary.ToString();
-                    CurrentControl.SetMessage(message);
+                    string summaryText = summary.ToString();
 
+                    CurrentControl.SetMessage("Execution Summary :" + "\n\n" + summaryText);
                 }
                 finally
                 {
@@ -337,7 +650,57 @@ namespace Neo4jDriverExcelAddin
             {
                 await session.CloseAsync();
             }
+        }
 
+        private static void LoadRowsFromRootNode(List<IRecord> records, Worksheet worksheet)
+        {
+            bool isFirstRow = true;
+            int row = 2;
+            Dictionary<string, int> propertiesIndex = new Dictionary<string, int>();
+            foreach (var r in records)
+            {
+                var node = r[0] as INode;
+                var properties = node.Properties;
+                int i = 0;
+                foreach (var k in properties.Keys)
+                {
+                    isFirstRow = false;
+                    if (!propertiesIndex.TryGetValue(k, out i))
+                    {
+                        i = propertiesIndex.Count;
+                        propertiesIndex.Add(k,i);
+                        isFirstRow = true;
+                    }
+
+                    var colName = GetColNameFromIndex(i + 1);
+                    if (isFirstRow)
+                        worksheet.Range[$"{colName}1"].Value2 = k;
+                    worksheet.Range[$"{colName}{row}"].Value2 = properties[k].ToString();
+                    
+                }
+
+                row++;
+                isFirstRow = false;
+            }
+        }
+        private static void LoadRowsFromRecords(List<IRecord> records, Worksheet worksheet)
+        {
+            bool isFirstRow = true;
+            int row = 2;
+            foreach (var r in records)
+            {
+                for (int i = 0; i < r.Keys.Count; i++)
+                {
+                    var colName = GetColNameFromIndex(i + 1);
+                    var key = r.Keys[i];
+                    if (isFirstRow)
+                        worksheet.Range[$"{colName}1"].Value2 = key;
+                    worksheet.Range[$"{colName}{row}"].Value2 = r.Values[key].As<string>();
+                }
+
+                row++;
+                isFirstRow = false;
+            }
         }
 
         private async void CreateRelationships(object sender, SelectionArgs e)
